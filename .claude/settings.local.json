@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/Scripts/python.exe -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(./venv/Scripts/python.exe -m pip list)",
+      "Bash(./venv/Scripts/python.exe -c ' *)",
+      "Bash(timeout 4 ./venv/Scripts/python.exe ui/window.py)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(timeout 4 ./venv/Scripts/python.exe -c ' *)",
+      "Bash(./venv/Scripts/python.exe services/gemini_api.py)",
+      "Bash(./venv/Scripts/python.exe -m services.gemini_api)",
+      "Bash(rm config.json)"
+    ]
+  }
+}

@@ -320,6 +320,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
         clean_key = self.key_input.text().strip()
         self.action_btn.setEnabled(False)
         self.action_btn.setText("Checking Key...")
+        self.key_input.setReadOnly(False)
         self._set_status("Checking Key...", "#5f6368")
 
         self._worker = ApiKeyValidationWorker(clean_key)
@@ -327,6 +328,14 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
         self._worker.start()
 
     def _on_validated(self, ok: bool, message: str):
+        # Ignore results from a superseded worker. The UI only lets one
+        # validation run at a time (the button stays disabled until this
+        # fires), but without this guard a stale callback slipping through
+        # would clobber a newer state - e.g. a late "invalid" result landing
+        # after a fresh "valid" one, leaving the success read-only box next
+        # to failure text/button on screen at once.
+        if self.sender() is not self._worker:
+            return
         if ok:
             self._verified = True
             # The "Checking Key..." status is fully replaced (never overlaid) by
@@ -338,6 +347,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
             self.action_btn.raise_()
         else:
             self._verified = False
+            self.key_input.setReadOnly(False)
             self.action_btn.setText("Verify Key")
             self.action_btn.setEnabled(True)
             self._set_status("✗ Invalid API Key. Please check your key in Google AI Studio.", "#D93025")

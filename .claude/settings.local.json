@@ -26,7 +26,26 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(git reset *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(python -c \"import ast, sys; ast.parse\\(open\\('ui/window.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(git diff *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('ui/window.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('ui/dialogs.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('ui/chat_bubble.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\('ui/window.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('services/telemetry.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\('ui/dialogs.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(venv/Scripts/python.exe -c \"import PyQt6; print\\('ok'\\)\")",
+      "Bash(venv/Scripts/python.exe \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--DevProjects-GSight\\\\2d916a95-c7d5-4c3f-bc57-2c3190eaf3fa\\\\scratchpad\\\\onboarding_states.py\")",
+      "Bash(venv/Scripts/python.exe \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--DevProjects-GSight\\\\2d916a95-c7d5-4c3f-bc57-2c3190eaf3fa\\\\scratchpad\\\\onboarding_real.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--DevProjects-GSight\\\\2d916a95-c7d5-4c3f-bc57-2c3190eaf3fa\\\\scratchpad\\\\onboarding_real.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--DevProjects-GSight\\\\2d916a95-c7d5-4c3f-bc57-2c3190eaf3fa\\\\scratchpad\\\\onboarding_race.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--DevProjects-GSight\\\\2d916a95-c7d5-4c3f-bc57-2c3190eaf3fa\\\\scratchpad\\\\onboarding_race2.py\")",
+      "Bash(venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('ui/dialogs.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('services/storage.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('version.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\('ui/dialogs.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\('services/updater.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--DevProjects-GSight\\\\2d916a95-c7d5-4c3f-bc57-2c3190eaf3fa\\\\scratchpad\\\\settings_updater_test.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe -c ')",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe -c ' *)"
     ]
   }
 }

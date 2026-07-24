@@ -1,13 +1,34 @@
 """Local JSON config storage: API key, telemetry preferences, and chat threads."""
 
 import json
+import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config.json"
-CAPTURES_DIR = PROJECT_ROOT / "captures"
+
+def get_user_data_dir() -> Path:
+    """Where GSight's persistent data lives.
+
+    In development this is the project root, same as before. In a frozen
+    PyInstaller exe, __file__ resolves inside the temporary _MEIPASS
+    extraction folder, which is wiped and re-extracted to a new temp path on
+    every launch - writing config.json there silently discards onboarding
+    state and the API key each run. %APPDATA%/GSight survives across
+    launches and is the standard place for per-user app data on Windows.
+    """
+    if getattr(sys, "frozen", False):
+        base_dir = Path(os.environ.get("APPDATA", Path.home())) / "GSight"
+    else:
+        base_dir = Path(__file__).resolve().parent.parent
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
+
+USER_DATA_DIR = get_user_data_dir()
+CONFIG_PATH = USER_DATA_DIR / "config.json"
+CAPTURES_DIR = USER_DATA_DIR / "captures"
 
 DEFAULT_CONFIG = {
     "api_key": "",

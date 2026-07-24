@@ -75,31 +75,26 @@ QPushButton#newChatButton {
     text-align: left;
 }
 QPushButton#newChatButton:hover { background-color: #4285F4; }
-/* Force 100% solid opaque background to prevent Win32 text stacking */
-QListWidget#sidebarList {
-    background-color: #121212; /* Completely solid, zero translucency */
-    border: 1px solid #2A2A2A;
+QListWidget#sidebarList, QListWidget#sidebarList::viewport {
+    background-color: #121212;
+    border: none;
     outline: none;
 }
 
 QListWidget#sidebarList::item {
-    padding: 10px 12px;
-    background-color: #121212; /* Match solid background */
+    padding: 10px 8px;
+    background-color: #121212;
     color: #E3E3E3;
     border: none;
-    border-radius: 4px;
 }
 
-/* Completely flat hover state */
 QListWidget#sidebarList::item:hover {
-    background-color: #1E1E1E; /* Solid dark grey */
+    background-color: #1E1E1E;
     color: #FFFFFF;
 }
 
-/* Solid selection state */
-QListWidget#sidebarList::item:selected,
-QListWidget#sidebarList::item:selected:hover {
-    background-color: #1A73E8; /* Solid blue */
+QListWidget#sidebarList::item:selected {
+    background-color: #2D3748;
     color: #FFFFFF;
 }
 
@@ -546,6 +541,9 @@ class MainWindow(QWidget):
         self.sidebar_list = QListWidget()
         self.sidebar_list.setObjectName("sidebarList")
         self.sidebar_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.sidebar_list.setAutoFillBackground(True)
+        self.sidebar_list.viewport().setAutoFillBackground(True)
+        self.sidebar_list.viewport().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.sidebar_list.currentItemChanged.connect(self._on_sidebar_item_changed)
         self.sidebar_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.sidebar_list.customContextMenuRequested.connect(self._on_sidebar_context_menu)

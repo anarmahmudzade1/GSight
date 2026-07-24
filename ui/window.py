@@ -56,7 +56,7 @@ QLabel#titleLabel { color: #E8EAED; font-weight: bold; font-size: 20px; backgrou
 QLabel { color: #E8EAED; background: transparent; font-size: 15px; }
 QScrollArea { background: transparent; border: none; }
 QScrollArea#chatScroll > QWidget > QWidget#chatBody {
-    background-color: rgba(18, 18, 22, 50);
+    background-color: rgba(18, 18, 22, 30);
     border-radius: 10px;
 }
 QFrame#sidebar {

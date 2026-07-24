@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
-from PyQt6.QtCore import Qt, QThread, QTimer, QPoint, pyqtSignal, QBuffer, QIODeviceBase, QEvent, QObject
+from PyQt6.QtCore import Qt, QThread, QTimer, QPoint, pyqtSignal, QBuffer, QIODeviceBase
 from PyQt6.QtGui import QPixmap, QIcon, QColor, QPalette
 from PyQt6.QtWidgets import (
     QWidget,
@@ -75,28 +75,47 @@ QPushButton#newChatButton {
     text-align: left;
 }
 QPushButton#newChatButton:hover { background-color: #4285F4; }
+/* Standard, plain sidebar list styling */
 QListWidget#sidebarList {
-    background-color: transparent;
-    color: #C4C7C5;
+    background-color: #1E1E1E; /* Solid dark background, no alpha stacking */
     border: none;
-    font-size: 13px;
+    outline: none;
 }
-/* Keep items completely transparent on hover to prevent translucent overlay compounding */
+
 QListWidget#sidebarList::item {
-    padding: 10px 8px;
-    background-color: transparent;
+    padding: 10px 12px;
     color: #E3E3E3;
-    border-radius: 6px;
+    border: none;
+    border-radius: 4px;
 }
 
+/* NO hover background coloring at all */
 QListWidget#sidebarList::item:hover {
-    background-color: transparent; /* Absolutely NO background color change on hover */
+    background-color: transparent;
 }
 
-QListWidget#sidebarList::item:selected,
-QListWidget#sidebarList::item:selected:hover {
-    background-color: rgba(66, 133, 244, 50); /* Solid subtle selection without stackable alpha */
-    color: #8AB4F8;
+/* Simple, standard solid selection */
+QListWidget#sidebarList::item:selected {
+    background-color: #2D3748;
+    color: #FFFFFF;
+}
+
+/* Restore normal, clean scrollbar styling for the sidebar list */
+QListWidget#sidebarList QScrollBar:vertical {
+    background: #1E1E1E;
+    width: 8px;
+    margin: 0px;
+}
+
+QListWidget#sidebarList QScrollBar::handle:vertical {
+    background: #4A5568;
+    min-height: 20px;
+    border-radius: 4px;
+}
+
+QListWidget#sidebarList QScrollBar::add-line:vertical,
+QListWidget#sidebarList QScrollBar::sub-line:vertical {
+    height: 0px;
 }
 QFrame#promptInputContainer {
     background-color: #F1F3F4;
@@ -392,50 +411,6 @@ class _AttachmentThumb(QWidget):
         self.remove_btn.clicked.connect(lambda: self.removed.emit(self))
 
 
-class _HoverResetFilter(QObject):
-    """Force-drops QAbstractItemView's cached hover index.
-
-    The view only clears it on QEvent.Leave delivered to the viewport, which a
-    frameless always-on-top overlay can miss when it's hidden or deactivated
-    out from under the cursor - leaving the ::item:hover highlight stuck on the
-    last hovered row.
-    """
-
-    _TRIGGERS = (
-        QEvent.Type.Leave,
-        QEvent.Type.Hide,
-        # Sent to children when a PARENT is hidden - which is exactly what
-        # _toggle_sidebar does while the cursor is still over a row.
-        QEvent.Type.HideToParent,
-        QEvent.Type.WindowDeactivate,
-    )
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # Re-entrancy guard: we synthesise a Leave on the viewport, and this
-        # same filter is installed on that viewport, so without this flag the
-        # synthetic event would recurse infinitely.
-        self._dispatching = False
-
-    def install_on(self, view):
-        """Filter both the view and its viewport - Leave lands on the viewport,
-        Hide/HideToParent land on the view itself."""
-        view.installEventFilter(self)
-        view.viewport().installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        if not self._dispatching and event.type() in self._TRIGGERS:
-            self._dispatching = True
-            try:
-                viewport = obj.viewport() if hasattr(obj, "viewport") else obj
-                QApplication.sendEvent(viewport, QEvent(QEvent.Type.Leave))
-                viewport.update()
-            finally:
-                self._dispatching = False
-        # Always False: this filter observes, it never consumes.
-        return False
-
-
 class MainWindow(QWidget):
     """Translucent, frameless, resizable chat overlay with streaming Gemini replies."""
 
@@ -577,11 +552,6 @@ class MainWindow(QWidget):
         self.sidebar_list.viewport().setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
         self.sidebar_list.setMouseTracking(True)
         layout.addWidget(self.sidebar_list, stretch=1)
-
-        # Kept as an attribute on self so it isn't garbage-collected - a filter
-        # that goes out of scope silently stops filtering.
-        self._hover_reset = _HoverResetFilter(self)
-        self._hover_reset.install_on(self.sidebar_list)
 
         return sidebar
 

@@ -81,11 +81,21 @@ QListWidget#sidebarList {
     border: none;
     font-size: 13px;
 }
-QListWidget#sidebarList::item { padding: 10px 8px; border-radius: 8px; margin: 1px 0; }
-QListWidget#sidebarList::item:hover { background-color: rgba(255, 255, 255, 14); }
+/* Keep items completely transparent on hover to prevent translucent overlay compounding */
+QListWidget#sidebarList::item {
+    padding: 10px 8px;
+    background-color: transparent;
+    color: #E3E3E3;
+    border-radius: 6px;
+}
+
+QListWidget#sidebarList::item:hover {
+    background-color: transparent; /* Absolutely NO background color change on hover */
+}
+
 QListWidget#sidebarList::item:selected,
 QListWidget#sidebarList::item:selected:hover {
-    background-color: rgba(66, 133, 244, 60);
+    background-color: rgba(66, 133, 244, 50); /* Solid subtle selection without stackable alpha */
     color: #8AB4F8;
 }
 QFrame#promptInputContainer {
@@ -561,6 +571,11 @@ class MainWindow(QWidget):
         self.sidebar_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.sidebar_list.customContextMenuRequested.connect(self._on_sidebar_context_menu)
         self.sidebar_list.itemChanged.connect(self._on_sidebar_item_renamed)
+        # Repaint the viewport background fully on every update instead of
+        # caching/compositing over the previous frame - that accumulation is
+        # what let translucent hover rects stack into a solid grey block.
+        self.sidebar_list.viewport().setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+        self.sidebar_list.setMouseTracking(True)
         layout.addWidget(self.sidebar_list, stretch=1)
 
         # Kept as an attribute on self so it isn't garbage-collected - a filter

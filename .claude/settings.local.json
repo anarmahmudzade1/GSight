@@ -9,7 +9,24 @@
       "Bash(timeout 4 ./venv/Scripts/python.exe -c ' *)",
       "Bash(./venv/Scripts/python.exe services/gemini_api.py)",
       "Bash(./venv/Scripts/python.exe -m services.gemini_api)",
-      "Bash(rm config.json)"
+      "Bash(rm config.json)",
+      "Bash(./venv/Scripts/python.exe -m pip install posthog)",
+      "Bash(./venv/Scripts/python.exe assets/generate_icon.py)",
+      "Bash(./venv/Scripts/python.exe -c \"from PIL import Image; im=Image.open\\('assets/icon.ico'\\); print\\(im.size\\)\")",
+      "Bash(rm -f config.json)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(timeout 4 ./venv/Scripts/python.exe -m ui.window)",
+      "Bash(timeout 4 ./venv/Scripts/python.exe -u -c ' *)",
+      "Bash(./venv/Scripts/python.exe main.py --help)",
+      "Bash(timeout 6 ./venv/Scripts/python.exe -u main.py --mode=chat)",
+      "Bash(timeout 6 ./venv/Scripts/python.exe -u main.py --mode=capture)",
+      "Bash(./venv/Scripts/python.exe scripts/create_shortcuts.py)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git reset *)",
+      "Bash(git commit *)"
     ]
   }
 }

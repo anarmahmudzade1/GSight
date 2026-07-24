@@ -104,8 +104,9 @@ QListWidget {
     border: 1px solid rgba(255, 255, 255, 25); border-radius: 8px; font-size: 15px;
 }
 QListWidget::item { background-color: transparent; border-radius: 8px; padding: 10px; color: #FFFFFF; }
-QListWidget::item:hover { background-color: rgba(255, 255, 255, 38); }
+QListWidget::item:hover { background-color: transparent; }
 QListWidget::item:selected { background-color: rgba(255, 255, 255, 64); color: #FFFFFF; }
+QPushButton:hover { background-color: transparent; }
 """
 
 

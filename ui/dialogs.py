@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QCheckBox,
+    QAbstractItemView,
 )
 
 from services.gemini_api import clean_api_key, is_valid_key_format, validate_api_key_live
@@ -93,20 +94,79 @@ QLineEdit#apiKeyInput:read-only {
 }
 """
 
-# Dark, fully-opaque override for the post-screenshot chat selector, matching
-# the app's dark glass theme (unlike the onboarding/settings cards, which stay
-# solid white by design). All text is explicit solid white for contrast.
-CHAT_SELECTOR_STYLE = """
-QDialog { background-color: #1A1A1E; border: 1px solid #33333A; border-radius: 0px; }
-QLabel { color: #FFFFFF; }
-QListWidget {
-    background-color: rgba(255, 255, 255, 10); color: #FFFFFF;
-    border: 1px solid rgba(255, 255, 255, 25); border-radius: 8px; font-size: 15px;
+# Dark, fully-opaque stylesheet for the post-screenshot chat picker, applied
+# via setStyleSheet() directly (replacing DIALOG_STYLE, not appended on top of
+# it) so nothing here can be shadowed by an inherited alpha-blended rule.
+# Every background colour is fully opaque - no rgba() with alpha below 255
+# anywhere. QAbstractScrollArea scrolls its viewport by blitting, which is
+# only correct over an opaque background; the previous rgba(..., 10) list
+# background and rgba(..., 64) selection colour are what let old text pixels
+# survive a scroll instead of being erased, producing the ghosting/smearing.
+#
+# No :hover rule anywhere, by design - hover feedback is deliberately absent
+# per product decision, which also means there is no hover state left to get
+# stuck.
+CHAT_PICKER_STYLE = """
+QDialog {
+    background-color: #1A1A1E;
 }
-QListWidget::item { background-color: transparent; border-radius: 8px; padding: 10px; color: #FFFFFF; }
-QListWidget::item:hover { background-color: transparent; }
-QListWidget::item:selected { background-color: rgba(255, 255, 255, 64); color: #FFFFFF; }
-QPushButton:hover { background-color: transparent; }
+QLabel {
+    background-color: transparent;
+    color: #E8EAED;
+    font-size: 16px;
+    font-weight: bold;
+}
+QListWidget {
+    background-color: #202024;
+    color: #E8EAED;
+    border: 1px solid #34343A;
+    border-radius: 8px;
+    outline: none;
+    font-size: 14px;
+}
+QListWidget::item {
+    background-color: #202024;
+    color: #E8EAED;
+    padding: 10px 12px;
+    border: none;
+}
+QListWidget::item:selected {
+    background-color: #2E2E35;
+    color: #FFFFFF;
+}
+QListWidget::item:focus {
+    background-color: #2E2E35;
+    color: #FFFFFF;
+}
+QScrollBar:vertical {
+    background-color: #202024;
+    width: 10px;
+    margin: 0;
+    border: none;
+}
+QScrollBar::handle:vertical {
+    background-color: #4A4A52;
+    border-radius: 5px;
+    min-height: 24px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+    border: none;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background-color: #202024;
+}
+QPushButton {
+    background-color: #2E2E35;
+    color: #E8EAED;
+    border: 1px solid #43434B;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+}
+QPushButton:pressed {
+    background-color: #3A3A42;
+}
 """
 
 
@@ -125,7 +185,9 @@ class _FramelessDialog(QDialog):
     def _make_opaque(self, extra_style: str = SOLID_DIALOG_STYLE):
         """Opt this dialog instance out of glass entirely: solid opaque card,
         no rounded desktop cutouts. Call after super().__init__(). Defaults to
-        the shared solid-white card; pass CHAT_SELECTOR_STYLE for the dark variant."""
+        the shared solid-white card. ChatSelectorDialog doesn't use this - it
+        sets WA_TranslucentBackground/autofill directly and applies its own
+        complete CHAT_PICKER_STYLE (see its __init__)."""
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setStyleSheet(self.styleSheet() + extra_style)
 
@@ -310,7 +372,6 @@ class ChatSelectorDialog(_FramelessDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._make_opaque(CHAT_SELECTOR_STYLE)
         self.setFixedSize(360, 420)
         self._chosen_thread_id: str | None = None
 
@@ -321,16 +382,11 @@ class ChatSelectorDialog(_FramelessDialog):
 
         # No Cancel/Continue buttons: a single click on any row instantly
         # chooses it and closes the dialog. Escape still rejects (QDialog's
-        # default behavior, unchanged). Hover highlighting is pure QSS
-        # (:hover / :selected in CHAT_SELECTOR_STYLE) - no enterEvent/
-        # mouseMoveEvent toggling anywhere. Mouse tracking is enabled
-        # explicitly on both the widget AND its viewport (the actual thing
-        # that receives per-row mouse events in a QAbstractItemView), which is
-        # the standard fix for :hover states getting "stuck" on the
-        # last-hovered row after the cursor leaves it.
+        # default behavior, unchanged). There is deliberately no :hover rule
+        # in CHAT_PICKER_STYLE - hovering a row produces zero visual change,
+        # which structurally rules out the stuck-highlight bug this list used
+        # to have.
         self.list_widget = QListWidget()
-        self.list_widget.setMouseTracking(True)
-        self.list_widget.viewport().setMouseTracking(True)
         new_chat_item = QListWidgetItem("+ New Chat")
         new_chat_item.setData(Qt.ItemDataRole.UserRole, self.NEW_CHAT)
         self.list_widget.addItem(new_chat_item)
@@ -343,6 +399,30 @@ class ChatSelectorDialog(_FramelessDialog):
         self.list_widget.setCurrentRow(-1)  # nothing pre-selected
         self.list_widget.itemClicked.connect(self._on_choose)
         layout.addWidget(self.list_widget)
+
+        # This dialog must NOT inherit or set translucency. QAbstractScrollArea
+        # scrolls its viewport by blitting, which is only valid over an opaque
+        # background - a transparent viewport is what smears old text across the
+        # list when you drag the scrollbar.
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAutoFillBackground(True)
+
+        # Belt and braces: force the list's own viewport opaque too. The QSS
+        # below sets the colour; this guarantees Qt treats it as fill-worthy
+        # rather than composite-through.
+        self.list_widget.viewport().setAutoFillBackground(True)
+        self.list_widget.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+
+        # Per-pixel scrolling plus an explicit full-viewport repaint on every
+        # scrollbar move. This costs almost nothing on a list of this size and
+        # removes any remaining dependence on the blit fast path being correct.
+        self.list_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.verticalScrollBar().valueChanged.connect(
+            self.list_widget.viewport().update
+        )
+
+        self.setStyleSheet(CHAT_PICKER_STYLE)
 
     def _on_choose(self, item):
         if item is None:

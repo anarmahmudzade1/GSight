@@ -24,10 +24,13 @@ from version import APP_VERSION
 AI_STUDIO_URL = "https://aistudio.google.com/apikey"
 ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
 
-# Light, "clean glass" palette (inverted from the earlier dark theme): dark
-# text on bright/white surfaces, faint dark hairlines instead of faint light
-# ones. All three dialogs (onboarding, chat selector, settings) render as
-# fully opaque solid-white cards - see SOLID_DIALOG_STYLE below.
+# Light, "clean glass" base palette: dark text on bright/white surfaces,
+# faint dark hairlines instead of faint light ones. This is the shared
+# starting point for QDialog/QLabel/QLineEdit/QPushButton; the onboarding
+# and Settings dialogs now override it with the dark DARK_DIALOG_STYLE
+# below (see their _make_opaque(extra_style=...) calls), and the
+# post-capture chat picker replaces it outright with CHAT_PICKER_STYLE - so
+# none of the three actually render as a plain white card anymore.
 DIALOG_STYLE = """
 QDialog { background-color: rgba(255, 255, 255, 235); border-radius: 14px; }
 QLabel { color: #202124; background: transparent; font-size: 15px; }
@@ -83,6 +86,51 @@ QLineEdit#apiKeyInput:read-only {
     border: 2px solid #34A853;
     color: #5f6368;
     background-color: #E6F4EA;
+}
+"""
+
+# Dark counterpart to SOLID_DIALOG_STYLE: used by the onboarding and
+# Settings dialogs (passed as _make_opaque(extra_style=...)) so their text
+# sits on a dark card instead of white - light-on-white was the previous
+# design but read as too washed-out/muted, and going *lighter* on a white
+# background only makes that worse, so these two moved to the same dark
+# tone the chat picker below already uses instead. Every selector here
+# mirrors one in DIALOG_STYLE/SOLID_DIALOG_STYLE so the append in
+# _make_opaque() fully overrides it - nothing light leaks through.
+DARK_DIALOG_STYLE = """
+QDialog { background-color: #1A1A1E; border: 1px solid #34343A; border-radius: 14px; }
+QLabel { color: #E0E0E0; background: transparent; font-size: 15px; }
+QLineEdit {
+    background-color: #202024; color: #E0E0E0;
+    border: 1px solid #43434B; border-radius: 8px;
+    padding: 10px 14px; font-size: 15px;
+}
+QPushButton {
+    background-color: #1A73E8; color: white; border: none;
+    border-radius: 8px; padding: 10px 14px; font-size: 15px;
+}
+QPushButton:hover { background-color: #4285F4; }
+QPushButton:disabled { background-color: #3A3A42; color: #6B7280; }
+QPushButton#linkButton, QPushButton#flatButton {
+    background: transparent; color: #8AB4F8; text-decoration: underline;
+    padding: 0; text-align: left;
+}
+QPushButton#linkButton:hover, QPushButton#flatButton:hover { color: #AECBFA; }
+QLineEdit#apiKeyInput {
+    background-color: #202024;
+    color: #FFFFFF;
+    border: 2px solid #4285F4;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: bold;
+    selection-background-color: #375685;
+}
+QLineEdit#apiKeyInput:focus { border: 2px solid #8AB4F8; }
+QLineEdit#apiKeyInput:read-only {
+    border: 2px solid #81C995;
+    color: #9CA3AF;
+    background-color: #16281C;
 }
 """
 
@@ -168,7 +216,15 @@ class _FramelessDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # Every current subclass calls _make_opaque() (or, for
+        # ChatSelectorDialog, sets its own opaque attributes) - none actually
+        # want true glass. WA_TranslucentBackground is deliberately left
+        # unset (opaque) here rather than set True and toggled back False
+        # later: on Windows that True->False toggle doesn't fully undo the
+        # transparent surface format, and the dialog's own canvas silently
+        # stays alpha=0 forever after - only natively-styled child widgets
+        # (QPushButton, QLineEdit, ...) still paint solid, so the bug was
+        # invisible in casual testing and misread as a working opaque card.
         self.setStyleSheet(DIALOG_STYLE)
         if ICON_PATH.exists():
             self.setWindowIcon(QIcon(str(ICON_PATH)))
@@ -177,10 +233,16 @@ class _FramelessDialog(QDialog):
     def _make_opaque(self, extra_style: str = SOLID_DIALOG_STYLE):
         """Opt this dialog instance out of glass entirely: solid opaque card,
         no rounded desktop cutouts. Call after super().__init__(). Defaults to
-        the shared solid-white card. ChatSelectorDialog doesn't use this - it
-        sets WA_TranslucentBackground/autofill directly and applies its own
-        complete CHAT_PICKER_STYLE (see its __init__)."""
+        the shared solid-white card; pass extra_style=DARK_DIALOG_STYLE for the
+        dark card onboarding/Settings use instead. ChatSelectorDialog doesn't
+        use this - it sets WA_TranslucentBackground/autofill directly and
+        applies its own complete CHAT_PICKER_STYLE (see its __init__)."""
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        # Without this, a plain QDialog ignores its own QSS background-color/
+        # border entirely - only natively-styled child widgets (QPushButton,
+        # QLineEdit, ...) would show extra_style's colors, leaving the dialog
+        # canvas itself the OS default (typically white) underneath them.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(self.styleSheet() + extra_style)
 
     def _header(self, text: str) -> QHBoxLayout:
@@ -192,7 +254,7 @@ class _FramelessDialog(QDialog):
             ))
             row.addWidget(icon_label)
         title = QLabel(text)
-        title.setStyleSheet("font-size: 22px; font-weight: bold;")
+        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #FFFFFF;")
         row.addWidget(title)
         row.addStretch()
         return row
@@ -226,7 +288,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._make_opaque()
+        self._make_opaque(extra_style=DARK_DIALOG_STYLE)
         self.setFixedSize(700, 800)
         self._worker: ApiKeyValidationWorker | None = None
         self._verified = False
@@ -264,7 +326,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
         layout.addWidget(self.key_input)
 
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #D93025; font-size: 13px;")
+        self.status_label.setStyleSheet("color: #F28B82; font-size: 13px;")
         self.status_label.setWordWrap(True)
         self.status_label.setVisible(False)
         layout.addWidget(self.status_label)
@@ -306,7 +368,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
         # non-empty text - actual format/liveness is checked when clicked.
         clean_key = text.strip()
         self.action_btn.setEnabled(len(clean_key) > 0)
-        self._set_status("", "#202124")
+        self._set_status("", "#E0E0E0")
 
     def _on_return_pressed(self):
         if self.action_btn.isEnabled():
@@ -323,7 +385,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
         self.action_btn.setEnabled(False)
         self.action_btn.setText("Checking Key...")
         self.key_input.setReadOnly(False)
-        self._set_status("Checking Key...", "#5f6368")
+        self._set_status("Checking Key...", "#9CA3AF")
 
         self._worker = ApiKeyValidationWorker(clean_key)
         self._worker.finished_validation.connect(self._on_validated)
@@ -342,7 +404,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
             self._verified = True
             # The "Checking Key..." status is fully replaced (never overlaid) by
             # this single setText/setStyleSheet call on the same status_label.
-            self._set_status("✓ Verification Complete", "#34A853", bold=True)
+            self._set_status("✓ Verification Complete", "#81C995", bold=True)
             self.key_input.setReadOnly(True)
             self.action_btn.setText("Continue")
             self.action_btn.setEnabled(True)
@@ -352,7 +414,7 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
             self.key_input.setReadOnly(False)
             self.action_btn.setText("Verify Key")
             self.action_btn.setEnabled(True)
-            self._set_status("✗ Invalid API Key. Please check your key in Google AI Studio.", "#D93025")
+            self._set_status("✗ Invalid API Key. Please check your key in Google AI Studio.", "#F28B82")
 
     def _on_continue(self):
         # clean_api_key strips leading/trailing/embedded whitespace (spaces, tabs,
@@ -405,6 +467,13 @@ class ChatSelectorDialog(_FramelessDialog):
         # list when you drag the scrollbar.
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setAutoFillBackground(True)
+        # A plain QDialog ignores its own QSS background-color/border unless
+        # this is set - autoFillBackground() alone fills with the palette's
+        # Window role, not the stylesheet, so without this the canvas around
+        # the list stayed white while the list itself (a natively-styled
+        # QAbstractScrollArea) correctly picked up CHAT_PICKER_STYLE's dark
+        # background on its own.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         # Belt and braces: force the list's own viewport opaque too. The QSS
         # below sets the colour; this guarantees Qt treats it as fill-worthy
@@ -445,7 +514,7 @@ class SettingsDialog(_FramelessDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._make_opaque()
+        self._make_opaque(extra_style=DARK_DIALOG_STYLE)
         self.setFixedWidth(380)
 
         layout = QVBoxLayout(self)
@@ -460,7 +529,7 @@ class SettingsDialog(_FramelessDialog):
             "Telemetry can be disabled by editing config.json directly."
         )
         note.setWordWrap(True)
-        note.setStyleSheet("color: #5f6368; font-size: 13px;")
+        note.setStyleSheet("color: #E0E0E0; font-size: 13px;")
         layout.addWidget(note)
 
         privacy_note = QLabel(
@@ -469,7 +538,7 @@ class SettingsDialog(_FramelessDialog):
             "and personal data are never stored or analyzed."
         )
         privacy_note.setWordWrap(True)
-        privacy_note.setStyleSheet("color: #5f6368; font-size: 12px; font-style: italic;")
+        privacy_note.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
         layout.addWidget(privacy_note)
 
         close_btn = QPushButton("Close")
@@ -486,7 +555,7 @@ class SettingsDialog(_FramelessDialog):
         layout.addWidget(self.update_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         version_label = QLabel(f"GSight {APP_VERSION}")
-        version_label.setStyleSheet("color: #9AA0A6; font-size: 11px;")
+        version_label.setStyleSheet("color: #9CA3AF; font-size: 11px;")
         layout.addWidget(version_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Started every time Settings opens rather than once at app launch,

@@ -103,9 +103,9 @@ QListWidget {
     background-color: rgba(255, 255, 255, 10); color: #FFFFFF;
     border: 1px solid rgba(255, 255, 255, 25); border-radius: 8px; font-size: 15px;
 }
-QListWidget::item { padding: 10px; border-radius: 8px; }
-QListWidget::item:selected { background-color: rgba(66, 133, 244, 90); color: #FFFFFF; }
-QListWidget::item:hover { background-color: rgba(255, 255, 255, 18); }
+QListWidget::item { background-color: transparent; border-radius: 8px; padding: 10px; color: #FFFFFF; }
+QListWidget::item:hover { background-color: rgba(255, 255, 255, 38); }
+QListWidget::item:selected { background-color: rgba(255, 255, 255, 64); color: #FFFFFF; }
 """
 
 
@@ -320,8 +320,16 @@ class ChatSelectorDialog(_FramelessDialog):
 
         # No Cancel/Continue buttons: a single click on any row instantly
         # chooses it and closes the dialog. Escape still rejects (QDialog's
-        # default behavior, unchanged).
+        # default behavior, unchanged). Hover highlighting is pure QSS
+        # (:hover / :selected in CHAT_SELECTOR_STYLE) - no enterEvent/
+        # mouseMoveEvent toggling anywhere. Mouse tracking is enabled
+        # explicitly on both the widget AND its viewport (the actual thing
+        # that receives per-row mouse events in a QAbstractItemView), which is
+        # the standard fix for :hover states getting "stuck" on the
+        # last-hovered row after the cursor leaves it.
         self.list_widget = QListWidget()
+        self.list_widget.setMouseTracking(True)
+        self.list_widget.viewport().setMouseTracking(True)
         new_chat_item = QListWidgetItem("+ New Chat")
         new_chat_item.setData(Qt.ItemDataRole.UserRole, self.NEW_CHAT)
         self.list_widget.addItem(new_chat_item)

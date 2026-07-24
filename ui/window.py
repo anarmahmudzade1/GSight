@@ -83,12 +83,16 @@ QListWidget#sidebarList {
 QListWidget#sidebarList::item { padding: 10px 8px; border-radius: 8px; margin: 1px 0; }
 QListWidget#sidebarList::item:selected { background-color: rgba(66, 133, 244, 60); color: #8AB4F8; }
 QListWidget#sidebarList::item:hover { background-color: rgba(255, 255, 255, 14); }
-QTextEdit#promptInput {
+QFrame#promptInputContainer {
     background-color: #F1F3F4;
-    color: #000000;
     border: 1px solid rgba(0, 0, 0, 30);
     border-radius: 20px;
-    padding: 8px 16px;
+}
+QTextEdit#promptInput {
+    background: transparent;
+    color: #000000;
+    border: none;
+    padding: 2px 6px;
     font-size: 15px;
 }
 QPushButton#sendButton {
@@ -200,20 +204,31 @@ class _TitleBar(QWidget):
 
 
 class _ComposerInput(QTextEdit):
-    """Auto-expanding chat input: plain Enter sends, Shift+Enter inserts a newline."""
+    """Auto-expanding chat input: plain Enter sends, Shift+Enter inserts a newline.
+
+    Deliberately flat/borderless (no background, no border-radius, no frame of
+    its own) - _ComposerInputContainer supplies the rounded pill visuals. A
+    QTextEdit's internal viewport/scrollbar don't reliably respect a
+    border-radius applied directly to the QTextEdit itself, which let text and
+    the scrollbar bleed past the rounded corners; styling the *outer* QFrame
+    instead and keeping this widget purely rectangular avoids that entirely.
+    """
 
     submitted = pyqtSignal()
+    contentHeightChanged = pyqtSignal(int)
 
     MIN_HEIGHT = 40
-    MAX_HEIGHT = 140
+    MAX_HEIGHT = 120
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("promptInput")
         self.setPlaceholderText("Ask Gemini about this capture...")
         self.setAcceptRichText(False)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFixedHeight(self.MIN_HEIGHT)
         self.textChanged.connect(self._adjust_height)
 
@@ -226,8 +241,37 @@ class _ComposerInput(QTextEdit):
         self.setPalette(palette)
 
     def _adjust_height(self):
-        doc_height = int(self.document().size().height()) + 16
+        doc_height = int(self.document().size().height()) + 8
         new_height = max(self.MIN_HEIGHT, min(self.MAX_HEIGHT, doc_height))
+        if new_height == self.height():
+            return
+        self.setFixedHeight(new_height)
+        self.updateGeometry()
+        self.contentHeightChanged.emit(new_height)
+
+
+class _ComposerInputContainer(QFrame):
+    """Owns the rounded pill background and keeps its own frame height in lockstep
+    with the inner QTextEdit's content height, so the text box can never visually
+    expand past its container - both are updated from the same signal handler."""
+
+    MARGIN = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("promptInputContainer")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(self.MARGIN, self.MARGIN, self.MARGIN, self.MARGIN)
+
+        self.text_edit = _ComposerInput()
+        self.text_edit.contentHeightChanged.connect(self._on_content_height_changed)
+        layout.addWidget(self.text_edit)
+
+        self.setFixedHeight(self.text_edit.MIN_HEIGHT + self.MARGIN * 2)
+
+    def _on_content_height_changed(self, text_edit_height: int):
+        new_height = text_edit_height + self.MARGIN * 2
         if new_height == self.height():
             return
         self.setFixedHeight(new_height)
@@ -470,9 +514,10 @@ class MainWindow(QWidget):
         input_row = QHBoxLayout()
         input_row.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
-        self.prompt_input = _ComposerInput()
+        self.prompt_input_container = _ComposerInputContainer()
+        self.prompt_input = self.prompt_input_container.text_edit
         self.prompt_input.submitted.connect(self._on_submit)
-        input_row.addWidget(self.prompt_input, stretch=1)
+        input_row.addWidget(self.prompt_input_container, stretch=1)
 
         # Camera/screenshot button lives here, standard action size, right next
         # to Send - not in the title bar.

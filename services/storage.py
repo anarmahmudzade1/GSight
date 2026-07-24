@@ -1,6 +1,8 @@
-"""Local JSON chat history and API key configuration storage."""
+"""Local JSON config storage: API key, telemetry preferences, and chat threads."""
 
 import json
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -9,8 +11,15 @@ CAPTURES_DIR = PROJECT_ROOT / "captures"
 
 DEFAULT_CONFIG = {
     "api_key": "",
-    "chat_history": [],
+    "telemetry_enabled": True,
+    "onboarding_completed": False,
+    "distinct_id": "",
+    "threads": [],
 }
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def load_config() -> dict:
@@ -35,24 +44,80 @@ def get_api_key() -> str:
 
 def set_api_key(api_key: str) -> None:
     config = load_config()
-    config["api_key"] = api_key
+    config["api_key"] = api_key.strip()
     save_config(config)
 
 
-def load_chat_history() -> list:
-    return load_config().get("chat_history", [])
+def is_telemetry_enabled() -> bool:
+    return bool(load_config().get("telemetry_enabled", True))
 
 
-def save_chat_history(history: list) -> None:
+def set_telemetry_enabled(enabled: bool) -> None:
     config = load_config()
-    config["chat_history"] = history
+    config["telemetry_enabled"] = bool(enabled)
     save_config(config)
 
 
-def append_chat_message(role: str, text: str) -> None:
-    history = load_chat_history()
-    history.append({"role": role, "text": text})
-    save_chat_history(history)
+def is_onboarding_completed() -> bool:
+    return bool(load_config().get("onboarding_completed", False))
+
+
+def complete_onboarding(api_key: str, telemetry_enabled: bool) -> None:
+    """Atomically persist the outcome of the one-time onboarding flow."""
+    config = load_config()
+    config["api_key"] = api_key.strip()
+    config["telemetry_enabled"] = bool(telemetry_enabled)
+    config["onboarding_completed"] = True
+    save_config(config)
+
+
+def list_threads() -> list:
+    return load_config().get("threads", [])
+
+
+def get_thread(thread_id: str) -> dict | None:
+    for thread in list_threads():
+        if thread["id"] == thread_id:
+            return thread
+    return None
+
+
+def create_thread(name: str | None = None) -> dict:
+    config = load_config()
+    threads = config.setdefault("threads", [])
+    thread = {
+        "id": str(uuid.uuid4()),
+        "name": name or f"Chat {len(threads) + 1}",
+        "created_at": _now(),
+        "messages": [],
+    }
+    threads.append(thread)
+    save_config(config)
+    return thread
+
+
+def add_message(thread_id: str, role: str, text: str, images: list[str] | None = None) -> dict:
+    config = load_config()
+    for thread in config.setdefault("threads", []):
+        if thread["id"] == thread_id:
+            message = {"role": role, "text": text, "images": images or [], "timestamp": _now()}
+            thread["messages"].append(message)
+            save_config(config)
+            return message
+    raise KeyError(f"No chat thread with id {thread_id!r}")
+
+
+def rename_thread(thread_id: str, new_name: str) -> None:
+    new_name = new_name.strip()
+    if not new_name:
+        return
+    config = load_config()
+    for thread in config.get("threads", []):
+        if thread["id"] == thread_id:
+            thread["name"] = new_name
+            save_config(config)
+            return
+    raise KeyError(f"No chat thread with id {thread_id!r}")
 
 
 def ensure_captures_dir() -> Path:

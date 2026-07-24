@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QListWidget,
     QListWidgetItem,
-    QCheckBox,
     QAbstractItemView,
 )
 
@@ -53,15 +52,6 @@ QListWidget {
 QListWidget::item { padding: 10px; border-radius: 8px; }
 QListWidget::item:selected { background-color: rgba(66, 133, 244, 45); color: #1A73E8; }
 QListWidget::item:hover { background-color: rgba(0, 0, 0, 8); }
-QCheckBox { color: #202124; background: transparent; font-size: 14px; spacing: 8px; }
-QCheckBox::indicator {
-    width: 18px; height: 18px; border-radius: 5px;
-    border: 2px solid #9AA0A6; background-color: white;
-}
-QCheckBox::indicator:hover { border: 2px solid #1A73E8; }
-QCheckBox::indicator:checked {
-    border: 2px solid #1A73E8; background-color: #1A73E8;
-}
 """
 
 # Fully-opaque, rectangular override for every dialog: a solid "standard
@@ -279,10 +269,6 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
 
         layout.addStretch()
 
-        self.telemetry_checkbox = QCheckBox("Allow anonymous diagnostic & usage data (PostHog)")
-        self.telemetry_checkbox.setChecked(True)
-        layout.addWidget(self.telemetry_checkbox)
-
         button_row = QHBoxLayout()
         self.quit_btn = QPushButton("Quit")
         self.quit_btn.setAutoDefault(False)
@@ -359,9 +345,10 @@ class ApiKeyOnboardingDialog(_FramelessDialog):
     def _on_continue(self):
         # clean_api_key strips leading/trailing/embedded whitespace (spaces, tabs,
         # stray newlines) that copy-pasting can smuggle into the field. One atomic
-        # write persists the key, the telemetry consent, and the one-time
-        # onboarding_completed flag together.
-        complete_onboarding(clean_api_key(self.key_input.text()), self.telemetry_checkbox.isChecked())
+        # write persists the key and the one-time onboarding_completed flag together.
+        # Telemetry defaults on (see SettingsDialog's privacy notice); there is no
+        # opt-out step in onboarding itself.
+        complete_onboarding(clean_api_key(self.key_input.text()), True)
         self.accept()
 
 
@@ -440,8 +427,8 @@ class ChatSelectorDialog(_FramelessDialog):
 class SettingsDialog(_FramelessDialog):
     """App info panel, reachable from the tray menu.
 
-    Telemetry consent is captured once during onboarding (ApiKeyOnboardingDialog)
-    and is not re-exposed here.
+    Telemetry is on by default with no in-onboarding opt-out; this dialog is
+    where that data collection is disclosed to the user.
     """
 
     def __init__(self, parent=None):
@@ -458,12 +445,20 @@ class SettingsDialog(_FramelessDialog):
         note = QLabel(
             "GSight never sends prompt text, image pixels, or your API key. "
             "See the Privacy & Data Collection section of the README for the full event schema. "
-            "Your diagnostic data preference was set during onboarding and can be changed by "
-            "reinstalling or editing config.json directly."
+            "Telemetry can be disabled by editing config.json directly."
         )
         note.setWordWrap(True)
         note.setStyleSheet("color: #5f6368; font-size: 13px;")
         layout.addWidget(note)
+
+        privacy_note = QLabel(
+            "Analytics Notice: Anonymous usage data is recorded strictly for product "
+            "improvement and performance analytics. Your private chat content, captures, "
+            "and personal data are never stored or analyzed."
+        )
+        privacy_note.setWordWrap(True)
+        privacy_note.setStyleSheet("color: #5f6368; font-size: 12px; font-style: italic;")
+        layout.addWidget(privacy_note)
 
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)

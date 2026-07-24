@@ -56,7 +56,7 @@ QLabel#titleLabel { color: #E8EAED; font-weight: bold; font-size: 20px; backgrou
 QLabel { color: #E8EAED; background: transparent; font-size: 15px; }
 QScrollArea { background: transparent; border: none; }
 QScrollArea#chatScroll > QWidget > QWidget#chatBody {
-    background-color: rgba(18, 18, 22, 158);
+    background-color: rgba(18, 18, 22, 50);
     border-radius: 10px;
 }
 QFrame#sidebar {
@@ -856,7 +856,7 @@ class MainWindow(QWidget):
         self.prompt_input.clear()
         self._clear_attachments()
 
-        self._gemini_bubble = self._append_bubble("gemini", "…")
+        self._gemini_bubble = self._append_bubble("gemini", "")
         self._scroll_to_bottom()
 
         pil_images = [_qpixmap_to_pil(p) for p in pixmaps]

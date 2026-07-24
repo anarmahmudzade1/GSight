@@ -2,7 +2,7 @@
 
 import re
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap, QFont
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame, QTextEdit
 
@@ -11,6 +11,10 @@ from ui.highlighter import CodeHighlighter
 CODE_FENCE_RE = re.compile(r"```(\w*)\n?(.*?)```", re.DOTALL)
 
 DEFAULT_BUBBLE_MAX_WIDTH = 320
+
+THINKING_LABEL = "Thinking"
+THINKING_MAX_DOTS = 3
+THINKING_INTERVAL_MS = 400
 
 # Solid, fully-opaque hex fills (no rgba alpha) on both bubble frames - the
 # chat scroll area behind them carries its own translucent glass tint
@@ -97,6 +101,8 @@ class MessageBubble(QWidget):
 
         if text:
             self.set_text(text)
+        elif not self._is_user:
+            self._start_thinking_animation()
 
     def set_max_bubble_width(self, width: int):
         """Called by MainWindow.resizeEvent so bubbles reflow with the window instead
@@ -127,7 +133,13 @@ class MessageBubble(QWidget):
         return row_widget
 
     def set_text(self, text: str):
-        """Replace the bubble's rendered content (Markdown + syntax-highlighted code blocks)."""
+        """Replace the bubble's rendered content (Markdown + syntax-highlighted code blocks).
+        Halts the "Thinking…" animation, if one is running, before rendering."""
+        if hasattr(self, "loading_timer") and self.loading_timer.isActive():
+            self.loading_timer.stop()
+        self._render_text(text)
+
+    def _render_text(self, text: str):
         while self._text_container.count():
             item = self._text_container.takeAt(0)
             if item.widget():
@@ -138,6 +150,21 @@ class MessageBubble(QWidget):
                 self._text_container.addWidget(self._build_code_widget(content))
             elif content.strip():
                 self._text_container.addWidget(self._build_text_label(content.strip()))
+
+    def _start_thinking_animation(self):
+        """Show an animated "Thinking ." -> "Thinking .." -> "Thinking ..." loop
+        until real content arrives via set_text()."""
+        self._thinking_dots = 1
+        self._render_text(f"{THINKING_LABEL} {'.' * self._thinking_dots}")
+
+        self.loading_timer = QTimer(self)
+        self.loading_timer.setInterval(THINKING_INTERVAL_MS)
+        self.loading_timer.timeout.connect(self._animate_dots)
+        self.loading_timer.start()
+
+    def _animate_dots(self):
+        self._thinking_dots = (self._thinking_dots % THINKING_MAX_DOTS) + 1
+        self._render_text(f"{THINKING_LABEL} {'.' * self._thinking_dots}")
 
     @staticmethod
     def _build_text_label(text: str) -> QLabel:

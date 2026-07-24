@@ -93,6 +93,21 @@ QLineEdit#apiKeyInput:read-only {
 }
 """
 
+# Dark, fully-opaque override for the post-screenshot chat selector, matching
+# the app's dark glass theme (unlike the onboarding/settings cards, which stay
+# solid white by design). All text is explicit solid white for contrast.
+CHAT_SELECTOR_STYLE = """
+QDialog { background-color: #1A1A1E; border: 1px solid #33333A; border-radius: 0px; }
+QLabel { color: #FFFFFF; }
+QListWidget {
+    background-color: rgba(255, 255, 255, 10); color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 25); border-radius: 8px; font-size: 15px;
+}
+QListWidget::item { padding: 10px; border-radius: 8px; }
+QListWidget::item:selected { background-color: rgba(66, 133, 244, 90); color: #FFFFFF; }
+QListWidget::item:hover { background-color: rgba(255, 255, 255, 18); }
+"""
+
 
 class _FramelessDialog(QDialog):
     """Base for GSight's frameless, draggable, branded popup dialogs."""
@@ -106,11 +121,12 @@ class _FramelessDialog(QDialog):
             self.setWindowIcon(QIcon(str(ICON_PATH)))
         self._drag_offset: QPoint | None = None
 
-    def _make_opaque(self):
-        """Opt this dialog instance out of glass entirely: solid white card,
-        no rounded desktop cutouts. Call after super().__init__()."""
+    def _make_opaque(self, extra_style: str = SOLID_DIALOG_STYLE):
+        """Opt this dialog instance out of glass entirely: solid opaque card,
+        no rounded desktop cutouts. Call after super().__init__(). Defaults to
+        the shared solid-white card; pass CHAT_SELECTOR_STYLE for the dark variant."""
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-        self.setStyleSheet(self.styleSheet() + SOLID_DIALOG_STYLE)
+        self.setStyleSheet(self.styleSheet() + extra_style)
 
     def _header(self, text: str) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -293,7 +309,7 @@ class ChatSelectorDialog(_FramelessDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._make_opaque()
+        self._make_opaque(CHAT_SELECTOR_STYLE)
         self.setFixedSize(360, 420)
         self._chosen_thread_id: str | None = None
 

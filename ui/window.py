@@ -55,11 +55,11 @@ QLabel#titleLabel { color: #E8EAED; font-weight: bold; font-size: 20px; backgrou
 QLabel { color: #E8EAED; background: transparent; font-size: 15px; }
 QScrollArea { background: transparent; border: none; }
 QScrollArea#chatScroll > QWidget > QWidget#chatBody {
-    background-color: rgba(15, 15, 18, 148);
+    background-color: rgba(18, 18, 22, 158);
     border-radius: 10px;
 }
 QFrame#sidebar {
-    background-color: rgba(18, 18, 22, 235);
+    background-color: #1A1A1E;
     border: 1px solid rgba(255, 255, 255, 25);
     border-radius: 16px;
 }
@@ -228,8 +228,16 @@ class _ComposerInput(QTextEdit):
     def _adjust_height(self):
         doc_height = int(self.document().size().height()) + 16
         new_height = max(self.MIN_HEIGHT, min(self.MAX_HEIGHT, doc_height))
-        if new_height != self.height():
-            self.setFixedHeight(new_height)
+        if new_height == self.height():
+            return
+        self.setFixedHeight(new_height)
+        self.updateGeometry()
+        # Force the composer row's layout to recompute this frame instead of
+        # waiting for the next paint pass, so growth reads as smooth/immediate
+        # rather than a one-tick-delayed jump.
+        parent = self.parentWidget()
+        if parent is not None and parent.layout() is not None:
+            parent.layout().activate()
 
     def keyPressEvent(self, event):
         is_return = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
@@ -356,15 +364,18 @@ class MainWindow(QWidget):
 
         # Overlay drawer: parented to the glass container (not the layout), so
         # it floats above the chat content instead of taking up layout space.
+        #
+        # Deliberately NOT given a QGraphicsDropShadowEffect or its own
+        # WA_TranslucentBackground: stacking a second layered/composited
+        # surface on a child of an already-translucent top-level window is
+        # what triggers Windows' "UpdateLayeredWindowIndirect failed" error
+        # when the overlay is repositioned/raised. WA_TranslucentBackground
+        # must only ever be set on `self` (the top-level MainWindow); the
+        # solid QSS background below is what gives it definition instead.
         self.sidebar = self._build_sidebar()
         self.sidebar.setParent(self.container)
+        self.sidebar.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.sidebar.hide()
-
-        sidebar_shadow = QGraphicsDropShadowEffect(self.sidebar)
-        sidebar_shadow.setBlurRadius(32)
-        sidebar_shadow.setOffset(4, 0)
-        sidebar_shadow.setColor(QColor(0, 0, 0, 140))
-        self.sidebar.setGraphicsEffect(sidebar_shadow)
 
         self._position_sidebar_overlay()
 
@@ -518,10 +529,15 @@ class MainWindow(QWidget):
     # ---- Sidebar -------------------------------------------------
 
     def _toggle_sidebar(self):
+        # Position BEFORE showing/raising: raise_()-ing a widget whose geometry
+        # is still stale (or hasn't been computed yet) is what can push the
+        # Win32 layered-window update outside the top-level window's actual
+        # bounds and trigger "UpdateLayeredWindowIndirect failed".
         now_visible = not self.sidebar.isVisible()
-        self.sidebar.setVisible(now_visible)
         if now_visible:
             self._position_sidebar_overlay()
+        self.sidebar.setVisible(now_visible)
+        if now_visible:
             self.sidebar.raise_()
 
     def _position_sidebar_overlay(self):
@@ -533,6 +549,10 @@ class MainWindow(QWidget):
         margin = 8
         top = self.title_bar.geometry().bottom() + margin
         height = self.container.height() - top - margin
+        # Guard against degenerate geometry during the earliest layout pass
+        # (container not yet sized) - never hand Qt/Win32 a bogus rect.
+        if height <= 0 or self.container.width() <= 0:
+            return
         self.sidebar.setGeometry(margin, top, self.sidebar.width(), max(120, height))
 
     def _refresh_sidebar(self):

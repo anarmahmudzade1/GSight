@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
-from PyQt6.QtCore import Qt, QThread, QTimer, QPoint, pyqtSignal, QBuffer, QIODeviceBase
+from PyQt6.QtCore import Qt, QThread, QTimer, QPoint, pyqtSignal, QBuffer, QIODeviceBase, QEvent, QObject
 from PyQt6.QtGui import QPixmap, QIcon, QColor, QPalette
 from PyQt6.QtWidgets import (
     QWidget,
@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
+    QApplication,
 )
 
 from services.gemini_api import GeminiService
@@ -81,8 +82,12 @@ QListWidget#sidebarList {
     font-size: 13px;
 }
 QListWidget#sidebarList::item { padding: 10px 8px; border-radius: 8px; margin: 1px 0; }
-QListWidget#sidebarList::item:selected { background-color: rgba(66, 133, 244, 60); color: #8AB4F8; }
 QListWidget#sidebarList::item:hover { background-color: rgba(255, 255, 255, 14); }
+QListWidget#sidebarList::item:selected,
+QListWidget#sidebarList::item:selected:hover {
+    background-color: rgba(66, 133, 244, 60);
+    color: #8AB4F8;
+}
 QFrame#promptInputContainer {
     background-color: #F1F3F4;
     border: 1px solid rgba(0, 0, 0, 30);
@@ -212,6 +217,9 @@ class _ComposerInput(QTextEdit):
     border-radius applied directly to the QTextEdit itself, which let text and
     the scrollbar bleed past the rounded corners; styling the *outer* QFrame
     instead and keeping this widget purely rectangular avoids that entirely.
+
+    This widget MEASURES its content but never resizes itself - see
+    _ComposerInputContainer, which owns the height of both widgets.
     """
 
     submitted = pyqtSignal()
@@ -219,6 +227,9 @@ class _ComposerInput(QTextEdit):
 
     MIN_HEIGHT = 40
     MAX_HEIGHT = 120
+    # QSS `padding: 2px 6px` on #promptInput, plus 4px of slack. Named so the
+    # arithmetic in _adjust_height is auditable instead of a magic "+ 8".
+    _CHROME = 8
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -230,7 +241,15 @@ class _ComposerInput(QTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFixedHeight(self.MIN_HEIGHT)
-        self.textChanged.connect(self._adjust_height)
+
+        self._reported_height = self.MIN_HEIGHT
+        self._adjust_pending = False
+
+        # documentSizeChanged rather than textChanged: it also fires when the
+        # text re-wraps because the window was resized, which textChanged
+        # misses (that's why the composer used to keep a stale height until you
+        # typed again).
+        self.document().documentLayout().documentSizeChanged.connect(self._schedule_adjust)
 
         # Solid black, thicker caret: the QSS `color` alone isn't reliably
         # honored for the blinking text cursor on every Qt style, so the
@@ -240,20 +259,62 @@ class _ComposerInput(QTextEdit):
         palette.setColor(QPalette.ColorRole.Text, QColor("#000000"))
         self.setPalette(palette)
 
-    def _adjust_height(self):
-        doc_height = int(self.document().size().height()) + 8
-        new_height = max(self.MIN_HEIGHT, min(self.MAX_HEIGHT, doc_height))
-        if new_height == self.height():
+    # ---- Enter sends, Shift+Enter newlines --------------------------------
+    # This MUST live on the QTextEdit, not on the container QFrame: the frame
+    # has NoFocus and never sees key events, and QTextEdit accepts Return
+    # itself so the event never propagates up either.
+    def keyPressEvent(self, event):
+        is_return = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if is_return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.submitted.emit()
             return
-        self.setFixedHeight(new_height)
-        self.updateGeometry()
+        super().keyPressEvent(event)
+
+    # ---- Auto-grow ---------------------------------------------------------
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._schedule_adjust()
+
+    def _schedule_adjust(self, *_):
+        """Coalesce height recalculation onto the next event-loop turn.
+
+        documentSizeChanged and resizeEvent both fire while Qt is *inside* a
+        layout pass. Mutating widget geometry from there re-enters the layout
+        engine and lets the backing store's size disagree with the rect handed
+        to UpdateLayeredWindowIndirect. Deferring guarantees the resize happens
+        between events, against a settled layout, and still lands before the
+        next paint - so growth reads as immediate.
+        """
+        if self._adjust_pending:
+            return
+        self._adjust_pending = True
+        QTimer.singleShot(0, self._adjust_height)
+
+    def _adjust_height(self):
+        self._adjust_pending = False
+        document = self.document()
+
+        # document().size() is only meaningful once the wrap width matches the
+        # real viewport; before the first show() it is still the default, which
+        # is how a nonsense height used to reach setFixedHeight().
+        viewport_width = max(1, self.viewport().width())
+        if abs(document.textWidth() - viewport_width) > 0.5:
+            document.setTextWidth(viewport_width)
+
+        content = document.size().height() + self._CHROME + 2 * self.frameWidth()
+        new_height = int(max(self.MIN_HEIGHT, min(self.MAX_HEIGHT, round(content))))
+        if new_height == self._reported_height:
+            return
+        self._reported_height = new_height
         self.contentHeightChanged.emit(new_height)
 
 
 class _ComposerInputContainer(QFrame):
-    """Owns the rounded pill background and keeps its own frame height in lockstep
-    with the inner QTextEdit's content height, so the text box can never visually
-    expand past its container - both are updated from the same signal handler."""
+    """Owns the rounded pill background AND the height of both itself and the
+    inner QTextEdit. A single writer for both geometries means there is never a
+    frame in which the child is taller than the frame that clips it - which is
+    what used to hand the top-level layered window a dirty rect it could not
+    validate."""
 
     MARGIN = 4
 
@@ -263,32 +324,34 @@ class _ComposerInputContainer(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(self.MARGIN, self.MARGIN, self.MARGIN, self.MARGIN)
+        layout.setSpacing(0)
 
         self.text_edit = _ComposerInput()
-        self.text_edit.contentHeightChanged.connect(self._on_content_height_changed)
+        self.text_edit.contentHeightChanged.connect(self._apply_height)
         layout.addWidget(self.text_edit)
 
-        self.setFixedHeight(self.text_edit.MIN_HEIGHT + self.MARGIN * 2)
+        self._apply_height(self.text_edit.MIN_HEIGHT)
 
-    def _on_content_height_changed(self, text_edit_height: int):
-        new_height = text_edit_height + self.MARGIN * 2
-        if new_height == self.height():
+    def _apply_height(self, text_edit_height: int):
+        frame_height = text_edit_height + self.MARGIN * 2
+        # Compare against minimumHeight(), not height(): setFixedHeight() is an
+        # exact record of the last value we applied, whereas height() lags
+        # until the layout actually runs.
+        if (frame_height == self.minimumHeight()
+                and text_edit_height == self.text_edit.minimumHeight()):
             return
-        self.setFixedHeight(new_height)
+
+        # Parent first, then child: the clip region is always >= the widget it
+        # clips, never the other way round.
+        self.setFixedHeight(frame_height)
+        self.text_edit.setFixedHeight(text_edit_height)
         self.updateGeometry()
-        # Force the composer row's layout to recompute this frame instead of
-        # waiting for the next paint pass, so growth reads as smooth/immediate
-        # rather than a one-tick-delayed jump.
-        parent = self.parentWidget()
-        if parent is not None and parent.layout() is not None:
-            parent.layout().activate()
 
-    def keyPressEvent(self, event):
-        is_return = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-        if is_return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
-            self.submitted.emit()
-            return
-        super().keyPressEvent(event)
+        # Deliberately NO parent.layout().activate() here. Forcing a synchronous
+        # relayout of the composer row from inside a text-layout/resize callback
+        # is a direct trigger for "UpdateLayeredWindowIndirect failed ... The
+        # parameter is incorrect." Qt lays this row out on the next event-loop
+        # turn, before the next paint, which is visually indistinguishable.
 
 
 class _AttachmentThumb(QWidget):
@@ -317,6 +380,50 @@ class _AttachmentThumb(QWidget):
             "QPushButton:hover { background-color: #B3261E; }"
         )
         self.remove_btn.clicked.connect(lambda: self.removed.emit(self))
+
+
+class _HoverResetFilter(QObject):
+    """Force-drops QAbstractItemView's cached hover index.
+
+    The view only clears it on QEvent.Leave delivered to the viewport, which a
+    frameless always-on-top overlay can miss when it's hidden or deactivated
+    out from under the cursor - leaving the ::item:hover highlight stuck on the
+    last hovered row.
+    """
+
+    _TRIGGERS = (
+        QEvent.Type.Leave,
+        QEvent.Type.Hide,
+        # Sent to children when a PARENT is hidden - which is exactly what
+        # _toggle_sidebar does while the cursor is still over a row.
+        QEvent.Type.HideToParent,
+        QEvent.Type.WindowDeactivate,
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Re-entrancy guard: we synthesise a Leave on the viewport, and this
+        # same filter is installed on that viewport, so without this flag the
+        # synthetic event would recurse infinitely.
+        self._dispatching = False
+
+    def install_on(self, view):
+        """Filter both the view and its viewport - Leave lands on the viewport,
+        Hide/HideToParent land on the view itself."""
+        view.installEventFilter(self)
+        view.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if not self._dispatching and event.type() in self._TRIGGERS:
+            self._dispatching = True
+            try:
+                viewport = obj.viewport() if hasattr(obj, "viewport") else obj
+                QApplication.sendEvent(viewport, QEvent(QEvent.Type.Leave))
+                viewport.update()
+            finally:
+                self._dispatching = False
+        # Always False: this filter observes, it never consumes.
+        return False
 
 
 class MainWindow(QWidget):
@@ -361,7 +468,15 @@ class MainWindow(QWidget):
 
     def _build_ui(self):
         root = QHBoxLayout(self)
-        root.setContentsMargins(12, 12, 12, 12)
+        # The drop shadow below is painted OUTSIDE self.container's own rect.
+        # QGraphicsDropShadowEffect.boundingRectFor() expands by
+        # blurRadius * 3/2 and then unites with the offset copy, so these
+        # margins MUST be >= that expansion. If they aren't, the effect's
+        # dirty rect lands outside this (layered, WA_TranslucentBackground)
+        # top-level window and Win32 rejects the update with
+        # "UpdateLayeredWindowIndirect failed ... The parameter is incorrect."
+        # blur 16 -> 24px expansion; offset (0, 4) -> 28px needed at the bottom.
+        root.setContentsMargins(28, 26, 28, 30)
         root.setSpacing(0)
 
         # The chat pane is the ONLY widget in the layout - it always fills the
@@ -375,9 +490,9 @@ class MainWindow(QWidget):
         root.addWidget(self.container)
 
         shadow = QGraphicsDropShadowEffect(self.container)
-        shadow.setBlurRadius(40)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(0, 0, 0, 90))
+        shadow.setBlurRadius(16)                 # 16 * 3/2 = 24 <= margins above
+        shadow.setOffset(0, 4)                   # 24 + 4 = 28 <= bottom margin (30)
+        shadow.setColor(QColor(0, 0, 0, 110))    # denser, to offset the smaller blur
         self.container.setGraphicsEffect(shadow)
 
         layout = QVBoxLayout(self.container)
@@ -447,6 +562,11 @@ class MainWindow(QWidget):
         self.sidebar_list.customContextMenuRequested.connect(self._on_sidebar_context_menu)
         self.sidebar_list.itemChanged.connect(self._on_sidebar_item_renamed)
         layout.addWidget(self.sidebar_list, stretch=1)
+
+        # Kept as an attribute on self so it isn't garbage-collected - a filter
+        # that goes out of scope silently stops filtering.
+        self._hover_reset = _HoverResetFilter(self)
+        self._hover_reset.install_on(self.sidebar_list)
 
         return sidebar
 
@@ -782,7 +902,6 @@ class MainWindow(QWidget):
 
 if __name__ == "__main__":
     import sys
-    from PyQt6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
     window = MainWindow()

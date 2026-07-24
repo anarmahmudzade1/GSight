@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
 
 from services.gemini_api import clean_api_key, is_valid_key_format, validate_api_key_live
 from services.storage import complete_onboarding, list_threads
+from services.updater import UpdateCheckerThread
+from version import APP_VERSION
 
 AI_STUDIO_URL = "https://aistudio.google.com/apikey"
 ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
@@ -473,3 +475,44 @@ class SettingsDialog(_FramelessDialog):
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
+
+        self._download_url: str | None = None
+
+        self.update_btn = QPushButton("")
+        self.update_btn.setObjectName("flatButton")
+        self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_btn.setVisible(False)
+        self.update_btn.clicked.connect(self._open_release_page)
+        layout.addWidget(self.update_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        version_label = QLabel(f"GSight {APP_VERSION}")
+        version_label.setStyleSheet("color: #9AA0A6; font-size: 11px;")
+        layout.addWidget(version_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        # Started every time Settings opens rather than once at app launch,
+        # per spec - a short-lived QThread so the GET request never blocks
+        # this dialog's event loop. Parented to self so Qt tracks its
+        # lifetime with the dialog; done() below still waits for it if
+        # still in flight, since Qt destroying a running QThread out from
+        # under it is undefined behavior.
+        self._updater_thread = UpdateCheckerThread(self)
+        self._updater_thread.update_available.connect(self._on_update_available)
+        self._updater_thread.start()
+
+    def _on_update_available(self, latest_version: str, download_url: str):
+        self._download_url = download_url
+        self.update_btn.setText(f"\U0001F680 Update Available ({latest_version})")
+        self.update_btn.setVisible(True)
+
+    def _open_release_page(self):
+        if self._download_url:
+            QDesktopServices.openUrl(QUrl(self._download_url))
+
+    def done(self, r):
+        # This dialog is frameless (no native title-bar close button), so
+        # accept()/reject() - not closeEvent() - are the only paths a user
+        # actually takes out of it (Close button -> accept(), Escape ->
+        # reject()); both funnel through QDialog.done().
+        if self._updater_thread.isRunning():
+            self._updater_thread.wait()
+        super().done(r)

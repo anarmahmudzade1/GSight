@@ -302,6 +302,9 @@ class ChatSelectorDialog(_FramelessDialog):
 
         layout.addLayout(self._header("Select Chat to Continue"))
 
+        # No Cancel/Continue buttons: a single click on any row instantly
+        # chooses it and closes the dialog. Escape still rejects (QDialog's
+        # default behavior, unchanged).
         self.list_widget = QListWidget()
         new_chat_item = QListWidgetItem("+ New Chat")
         new_chat_item.setData(Qt.ItemDataRole.UserRole, self.NEW_CHAT)
@@ -312,20 +315,9 @@ class ChatSelectorDialog(_FramelessDialog):
             item.setData(Qt.ItemDataRole.UserRole, thread["id"])
             self.list_widget.addItem(item)
 
-        self.list_widget.itemDoubleClicked.connect(self._on_choose)
+        self.list_widget.setCurrentRow(-1)  # nothing pre-selected
+        self.list_widget.itemClicked.connect(self._on_choose)
         layout.addWidget(self.list_widget)
-
-        button_row = QHBoxLayout()
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        choose_btn = QPushButton("Continue")
-        choose_btn.clicked.connect(lambda: self._on_choose(self.list_widget.currentItem()))
-        button_row.addWidget(cancel_btn)
-        button_row.addStretch()
-        button_row.addWidget(choose_btn)
-        layout.addLayout(button_row)
-
-        self.list_widget.setCurrentRow(0)
 
     def _on_choose(self, item):
         if item is None:

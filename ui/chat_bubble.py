@@ -16,6 +16,7 @@ DEFAULT_BUBBLE_MAX_WIDTH = 320
 # chat scroll area behind them carries its own translucent glass tint
 # (ui/window.py's #chatBody), so the bubbles themselves must stay 100% opaque
 # or message text loses contrast/crispness against whatever peeks through.
+# Dark slate/blue palette to match the app's dark glass theme.
 USER_BUBBLE_STYLE = """
 QFrame#bubble { background-color: #1A73E8; border-radius: 16px; }
 QLabel { color: white; background: transparent; }
@@ -23,11 +24,11 @@ QLabel { color: white; background: transparent; }
 
 GEMINI_BUBBLE_STYLE = """
 QFrame#bubble {
-    background-color: #F1F3F4;
-    border: 1px solid rgba(0, 0, 0, 15);
+    background-color: #363B44;
+    border: 1px solid rgba(255, 255, 255, 30);
     border-radius: 16px;
 }
-QLabel { color: #202124; background: transparent; }
+QLabel { color: #F1F3F5; background: transparent; }
 """
 
 # Code blocks stay dark regardless of the overall theme - conventional and

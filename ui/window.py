@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 from PyQt6.QtCore import Qt, QThread, QTimer, QPoint, pyqtSignal, QBuffer, QIODeviceBase
-from PyQt6.QtGui import QPixmap, QIcon, QColor
+from PyQt6.QtGui import QPixmap, QIcon, QColor, QPalette
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QListWidget,
     QListWidgetItem,
-    QSplitter,
     QMenu,
 )
 
@@ -42,28 +41,26 @@ ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
 
 MAX_ATTACHMENTS = 5
 
-# Inverted, light "clean glass" theme: bright translucent panels, dark text,
-# faint dark hairlines instead of faint light ones. A real background *blur*
-# (acrylic/Mica) needs platform-specific DWM calls on Windows; this
-# approximates the look with translucency + a soft drop shadow.
+# Sleek dark glass theme: translucent near-black panels, light text, faint
+# light hairlines. A real background *blur* (acrylic/Mica) needs
+# platform-specific DWM calls on Windows; this approximates the look with
+# translucency + a soft drop shadow.
 GLASS_STYLE = """
 QFrame#glassContainer {
-    background-color: rgba(255, 255, 255, 140);
-    border: 1px solid rgba(0, 0, 0, 20);
+    background-color: rgba(18, 18, 22, 158);
+    border: 1px solid rgba(255, 255, 255, 22);
     border-radius: 16px;
 }
-QLabel#titleLabel { color: #202124; font-weight: bold; font-size: 20px; background: transparent; }
-QLabel { color: #202124; background: transparent; font-size: 15px; }
+QLabel#titleLabel { color: #E8EAED; font-weight: bold; font-size: 20px; background: transparent; }
+QLabel { color: #E8EAED; background: transparent; font-size: 15px; }
 QScrollArea { background: transparent; border: none; }
 QScrollArea#chatScroll > QWidget > QWidget#chatBody {
-    background-color: rgba(255, 255, 255, 64);
+    background-color: rgba(15, 15, 18, 148);
     border-radius: 10px;
 }
-QSplitter { background: transparent; }
-QSplitter::handle { background: transparent; }
 QFrame#sidebar {
-    background-color: rgba(255, 255, 255, 140);
-    border: 1px solid rgba(0, 0, 0, 20);
+    background-color: rgba(18, 18, 22, 235);
+    border: 1px solid rgba(255, 255, 255, 25);
     border-radius: 16px;
 }
 QPushButton#newChatButton {
@@ -79,16 +76,16 @@ QPushButton#newChatButton {
 QPushButton#newChatButton:hover { background-color: #4285F4; }
 QListWidget#sidebarList {
     background-color: transparent;
-    color: #3c4043;
+    color: #C4C7C5;
     border: none;
     font-size: 13px;
 }
 QListWidget#sidebarList::item { padding: 10px 8px; border-radius: 8px; margin: 1px 0; }
-QListWidget#sidebarList::item:selected { background-color: rgba(66, 133, 244, 40); color: #1A73E8; }
-QListWidget#sidebarList::item:hover { background-color: rgba(0, 0, 0, 8); }
+QListWidget#sidebarList::item:selected { background-color: rgba(66, 133, 244, 60); color: #8AB4F8; }
+QListWidget#sidebarList::item:hover { background-color: rgba(255, 255, 255, 14); }
 QTextEdit#promptInput {
-    background-color: rgba(0, 0, 0, 15);
-    color: #202124;
+    background-color: #F1F3F4;
+    color: #000000;
     border: 1px solid rgba(0, 0, 0, 30);
     border-radius: 20px;
     padding: 8px 16px;
@@ -104,21 +101,21 @@ QPushButton#sendButton {
 }
 QPushButton#sendButton:hover { background-color: #4285F4; }
 QPushButton#composerIconButton {
-    background-color: rgba(0, 0, 0, 10);
+    background-color: rgba(255, 255, 255, 18);
     border: none;
     border-radius: 20px;
-    color: #5f6368;
+    color: #C4C7C5;
     font-size: 16px;
 }
-QPushButton#composerIconButton:hover { background-color: rgba(0, 0, 0, 20); color: #202124; }
+QPushButton#composerIconButton:hover { background-color: rgba(255, 255, 255, 30); color: #E8EAED; }
 QPushButton#iconButton {
     background: transparent;
     border: none;
-    color: #5f6368;
+    color: #C4C7C5;
     font-size: 17px;
     padding: 4px 8px;
 }
-QPushButton#iconButton:hover { color: #202124; }
+QPushButton#iconButton:hover { color: #E8EAED; }
 """
 
 
@@ -220,6 +217,14 @@ class _ComposerInput(QTextEdit):
         self.setFixedHeight(self.MIN_HEIGHT)
         self.textChanged.connect(self._adjust_height)
 
+        # Solid black, thicker caret: the QSS `color` alone isn't reliably
+        # honored for the blinking text cursor on every Qt style, so the
+        # palette's Text role is set explicitly as well.
+        self.setCursorWidth(2)
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Text, QColor("#000000"))
+        self.setPalette(palette)
+
     def _adjust_height(self):
         doc_height = int(self.document().size().height()) + 16
         new_height = max(self.MIN_HEIGHT, min(self.MAX_HEIGHT, doc_height))
@@ -307,29 +312,15 @@ class MainWindow(QWidget):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(0)
 
-        # QSplitter (rather than the sidebar/container living directly in the
-        # QHBoxLayout) is what makes collapsing the sidebar reflow the chat pane
-        # cleanly: it owns geometry recalculation for its panes explicitly,
-        # instead of relying on a hidden sibling widget to release its layout
-        # space on its own.
-        self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        self.splitter.setStyleSheet(
-            "QSplitter { background: transparent; } QSplitter::handle { background: transparent; }"
-        )
-        self.splitter.setHandleWidth(8)
-        self.splitter.setChildrenCollapsible(False)
-        root.addWidget(self.splitter)
-
-        self.sidebar = self._build_sidebar()
-        self.splitter.addWidget(self.sidebar)
-
+        # The chat pane is the ONLY widget in the layout - it always fills the
+        # full window width. The sidebar is built separately below and floats
+        # on top of it as an absolutely-positioned overlay (see
+        # _position_sidebar_overlay), so opening/closing it never resizes or
+        # displaces the chat view.
         self.container = QFrame(self)
         self.container.setObjectName("glassContainer")
         self.container.setStyleSheet(GLASS_STYLE)
-        self.splitter.addWidget(self.container)
-
-        self.splitter.setStretchFactor(0, 0)
-        self.splitter.setStretchFactor(1, 1)
+        root.addWidget(self.container)
 
         shadow = QGraphicsDropShadowEffect(self.container)
         shadow.setBlurRadius(40)
@@ -341,7 +332,8 @@ class MainWindow(QWidget):
         layout.setContentsMargins(16, 12, 16, 10)
         layout.setSpacing(10)
 
-        layout.addWidget(self._build_title_bar())
+        self.title_bar = self._build_title_bar()
+        layout.addWidget(self.title_bar)
 
         self.chat_scroll = QScrollArea()
         self.chat_scroll.setObjectName("chatScroll")
@@ -362,8 +354,22 @@ class MainWindow(QWidget):
         grip_row.addWidget(QSizeGrip(self.container))
         layout.addLayout(grip_row)
 
+        # Overlay drawer: parented to the glass container (not the layout), so
+        # it floats above the chat content instead of taking up layout space.
+        self.sidebar = self._build_sidebar()
+        self.sidebar.setParent(self.container)
+        self.sidebar.hide()
+
+        sidebar_shadow = QGraphicsDropShadowEffect(self.sidebar)
+        sidebar_shadow.setBlurRadius(32)
+        sidebar_shadow.setOffset(4, 0)
+        sidebar_shadow.setColor(QColor(0, 0, 0, 140))
+        self.sidebar.setGraphicsEffect(sidebar_shadow)
+
+        self._position_sidebar_overlay()
+
     def _build_sidebar(self) -> QFrame:
-        sidebar = QFrame(self)
+        sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setStyleSheet(GLASS_STYLE)
         sidebar.setFixedWidth(240)
@@ -512,13 +518,22 @@ class MainWindow(QWidget):
     # ---- Sidebar -------------------------------------------------
 
     def _toggle_sidebar(self):
-        self.sidebar.setVisible(not self.sidebar.isVisible())
-        # Belt-and-suspenders: force the splitter (and this window) to
-        # immediately recompute geometry rather than waiting for the next
-        # paint/resize event, so the chat pane never looks squeezed/stale
-        # right after the toggle.
-        self.splitter.updateGeometry()
-        self.updateGeometry()
+        now_visible = not self.sidebar.isVisible()
+        self.sidebar.setVisible(now_visible)
+        if now_visible:
+            self._position_sidebar_overlay()
+            self.sidebar.raise_()
+
+    def _position_sidebar_overlay(self):
+        """Keeps the drawer floating over the chat area, below the title bar (so
+        the ☰ toggle button - which never moves - stays reachable while it's
+        open), without ever touching the chat pane's own layout/geometry."""
+        if not hasattr(self, "sidebar") or not hasattr(self, "title_bar"):
+            return
+        margin = 8
+        top = self.title_bar.geometry().bottom() + margin
+        height = self.container.height() - top - margin
+        self.sidebar.setGeometry(margin, top, self.sidebar.width(), max(120, height))
 
     def _refresh_sidebar(self):
         threads = list_threads()
@@ -637,6 +652,7 @@ class MainWindow(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_bubble_widths()
+        self._position_sidebar_overlay()
 
     def _update_bubble_widths(self):
         # Bubbles reflow with the window instead of staying pinned to whatever

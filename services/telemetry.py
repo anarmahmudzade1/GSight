@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - posthog is an optional runtime depende
 
 from services.storage import load_config, save_config
 
-POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY", "")
+POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY", "phc_rWCTzmZUSxsrwMF7fw8PYRNNTVCSPfHEF6TsGQ4SsXXh")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
 
 # The only events GSight is allowed to emit. Anything else raises rather than
@@ -42,7 +42,7 @@ class Telemetry:
     def __init__(self):
         self._client = None
         if POSTHOG_API_KEY and Posthog is not None:
-            self._client = Posthog(POSTHOG_API_KEY, host=POSTHOG_HOST)
+            self._client = Posthog(POSTHOG_API_KEY, host=POSTHOG_HOST, debug=False)
 
     @property
     def enabled(self) -> bool:

@@ -41,13 +41,13 @@ Nothing is created automatically; this is an explicit, user-run step.
 
 ## Privacy & Data Collection
 
-GSight ships with optional, privacy-scoped usage telemetry via [PostHog](https://posthog.com).
+GSight ships with privacy-scoped usage telemetry via [PostHog](https://posthog.com), enabled
+by default.
 
-- **Opt-out at any time**: the "Settings..." item in the tray menu toggles
-  `telemetry_enabled` in `config.json` and takes effect immediately.
-- **Inert by default**: no events are ever sent unless the app is built with a
-  `POSTHOG_API_KEY` environment variable configured — the published/default build ships
-  with none set, so telemetry is a safe no-op out of the box.
+- **Enabled by default**: the shipped build includes a PostHog project key, so telemetry is
+  active out of the box. Set `telemetry_enabled: false` in `config.json` to disable it, or
+  override `POSTHOG_API_KEY` / `POSTHOG_HOST` via environment variables to point at a
+  different project.
 - **Anonymous identity only**: a random `uuid4`, generated locally and stored as
   `distinct_id` in `config.json`. It is never derived from hardware, your name, or your
   email, and is not linked to any other account.

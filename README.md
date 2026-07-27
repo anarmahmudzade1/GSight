@@ -1,74 +1,61 @@
 # GSight
 
-Translucent desktop AI vision utility powered by Gemini, for developers and power users.
+A minimal, fast desktop client for Google Gemini. GSight gives you quick access to Gemini models with native keyboard shortcuts, customizable settings, and local data privacy.
 
-GSight sits in your system tray. Summon it with a global hotkey, crop any part of your
-screen, and ask Gemini about it in a floating glassmorphism chat window — no alt-tabbing,
-no uploading files by hand.
+---
 
-## Features
+## Key Features
 
-- **Two hotkeys, two modes** — `Ctrl+Shift+A` opens the floating chat directly; `Ctrl+Shift+S`
-  jumps straight into the drag-to-crop snipper.
-- **Multi-thread chat history**, stored locally in `config.json`.
-- **Streaming Gemini replies** with Markdown rendering and syntax-highlighted code blocks.
-- **Glassmorphism UI** — translucent, frameless, resizable chat window.
+* **Instant Access:** Built-in global keyboard shortcuts for rapid workflows.
+* **Model Selection:** Quickly toggle between Gemini models depending on your task.
+* **Privacy-First:** Your API key, local database, and configuration files stay stored locally on your machine (`%APPDATA%\GSight`).
+* **Clean UI:** Frameless, dark-themed interface designed to stay out of your way.
 
-## Getting Started
+---
 
-```
-python -m venv venv
-venv\Scripts\activate
+## Keyboard Shortcuts
+
+| Action | Shortcut |
+| :--- | :--- |
+| **Toggle Window / Quick Summon** | `Ctrl + Shift + A` |
+| **Open Settings** | `Ctrl + Shift + S` |
+
+---
+
+## Installation
+
+### Option 1: Download Pre-built Executable (Recommended)
+1. Go to the **Releases** section on GitHub.
+2. Download `GSight.exe`.
+3. Double-click to run—no installer or setup required.
+
+### Option 2: Run from Source
+If you want to run or modify the code locally:
+
+```bash
+# Clone the repository
+git clone [https://github.com/anarmahmudzade1/GSight.git](https://github.com/anarmahmudzade1/GSight.git)
+cd GSight
+
+# Install dependencies
 pip install -r requirements.txt
-python assets\generate_icon.py   # generates assets/icon.png + icon.ico
-python main.py                   # first run prompts for a Gemini API key
+
+# Run the app
+python main.py
 ```
 
-On first launch, GSight blocks all features behind a one-time API key setup dialog that
-links to [Google AI Studio](https://aistudio.google.com/apikey) and validates the key
-before letting you in.
+## Setup
 
-### Optional: desktop shortcuts
+When launching GSight for the first time, you'll be prompted to enter your **Gemini API Key**.
 
-```
-pip install pywin32
-python scripts\create_shortcuts.py
-```
+1. Get a free API key from [Google AI Studio](https://aistudio.google.com/).
+2. Paste it into the onboarding prompt in GSight.
+3. You're ready to go! You can update or change your key anytime in **Settings**.
 
-This writes two shortcuts to your Desktop — "GSight - Main Chat" and
-"GSight - Quick Screen Capture" — each launching `main.py` with the matching `--mode` flag.
-Nothing is created automatically; this is an explicit, user-run step.
+## Privacy & Security
 
-## Privacy & Data Collection
+GSight connects directly to Google's official Gemini API using your personal API key. Your conversation history and settings are stored locally on your device in `%APPDATA%\GSight`. No private text or chat logs are collected or sent to external servers.
 
-GSight ships with privacy-scoped usage telemetry via [PostHog](https://posthog.com), enabled
-by default.
+## License
 
-- **Enabled by default**: the shipped build includes a PostHog project key, so telemetry is
-  active out of the box. Set `telemetry_enabled: false` in `config.json` to disable it, or
-  override `POSTHOG_API_KEY` / `POSTHOG_HOST` via environment variables to point at a
-  different project.
-- **Anonymous identity only**: a random `uuid4`, generated locally and stored as
-  `distinct_id` in `config.json`. It is never derived from hardware, your name, or your
-  email, and is not linked to any other account.
-- **Never collected, under any configuration**: prompt text, screenshot/image pixel data,
-  Gemini responses, or your Gemini API key. `services/telemetry.py` also strips any
-  property whose key looks sensitive as a defense-in-depth safeguard.
-
-### Exact event schema
-
-| Event | Properties sent | When it fires |
-|---|---|---|
-| `app_launched` | `mode` (`"chat"` or `"capture"`) | Every process start |
-| `shortcut_triggered` | `mode` (`"chat"` or `"capture"`) | A global hotkey or tray menu action fires |
-| `crop_captured` | *(none)* | A drag-to-crop selection completes |
-| `chat_created` | *(none)* | A new chat thread is created |
-| `api_error_raised` | `stage` (e.g. `"stream"`) | A Gemini request fails |
-
-That is the complete list — `services/telemetry.py` raises an error rather than sending
-any event not in this table.
-
-## Project Layout
-
-See `CLAUDE.md` for the full architecture reference (directory layout, config.json schema,
-hotkey wiring, and visual design system).
+[MIT](LICENSE)

@@ -4,3 +4,8 @@ __pycache__/
 .env
 captures/
 config.json
+dist/
+build/
+*.spec
+.claude/
+CLAUDE.md
